@@ -3,46 +3,85 @@ using Oxide.Core.Plugins;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("WCustomStore", "wakanda | AI", "1.0.0")]
+    [Info("WCustomStore", "wakanda | AI", "2.0.1")]
     [Description("Плагин для проверки ID магазина и содержимого в безопасном городе.")]
     public class WCustomStore : RustPlugin
     {
         private ConfigData configData;
+        private Dictionary<uint, string> renamedShopNames = new Dictionary<uint, string>();
         
         private class ConfigData
         {
-            public Dictionary<string, ShopConfig> Shops { get; set; }
+            [JsonProperty("Магазины мирного города")]
+            public Dictionary<string, ShopConfig> CompoundShops { get; set; }
+            
+            [JsonProperty("Остальные магазины")]
+            public Dictionary<string, ShopConfig> OtherShops { get; set; }
         }
         
         private class ShopConfig
         {
-            public List<ShopItemConfig> НастройкаТоваров { get; set; }
+            [JsonProperty("Настройка товаров")]
+            public List<ShopItemConfig> ItemsConfig { get; set; }
         }
         
         private class ShopItemConfig
         {
-            public string ПредметДляПродажи { get; set; }
-            public Dictionary<string, int> ЦенаЗаПредмет { get; set; }
+            [JsonProperty("Shortname для продажи")]
+            public string ItemToSell { get; set; }
+            
+            [JsonProperty("Кол-во предмета для продажи")]
+            public int AmountToSell { get; set; }
+            
+            [JsonProperty("Shortname для цены")]
+            public string CurrencyItem { get; set; }
+            
+            [JsonProperty("Кол-во предмета для цены")]
+            public int CurrencyAmount { get; set; }
         }
         
         protected override void LoadDefaultConfig()
         {
             configData = new ConfigData
             {
-                Shops = new Dictionary<string, ShopConfig>
+                CompoundShops = new Dictionary<string, ShopConfig>
                 {
                     {
-                        "Output Outfitters", new ShopConfig
+                        "Building", new ShopConfig { ItemsConfig = new List<ShopItemConfig>() }
+                    },
+                    {
+                        "Weapons", new ShopConfig { ItemsConfig = new List<ShopItemConfig>() }
+                    },
+                    {
+                        "Resource Exchange", new ShopConfig { ItemsConfig = new List<ShopItemConfig>() }
+                    },
+                    {
+                        "Components", new ShopConfig { ItemsConfig = new List<ShopItemConfig>() }
+                    },
+                    {
+                        "Tools & Stuff", new ShopConfig { ItemsConfig = new List<ShopItemConfig>() }
+                    },
+                    {
+                        "Output Outfitters", new ShopConfig { ItemsConfig = new List<ShopItemConfig>() }
+                    }
+                },
+                OtherShops = new Dictionary<string, ShopConfig>
+                {
+                    {
+                        "Food", new ShopConfig
                         {
-                            НастройкаТоваров = new List<ShopItemConfig>
+                            ItemsConfig = new List<ShopItemConfig>
                             {
                                 new ShopItemConfig
                                 {
-                                    ПредметДляПродажи = "pistol.revolver",
-                                    ЦенаЗаПредмет = new Dictionary<string, int> { { "scrap", 66 } }
+                                    ItemToSell = "scrap",
+                                    AmountToSell = 30,
+                                    CurrencyItem = "fish.minnows",
+                                    CurrencyAmount = 10
                                 }
                             }
                         }
@@ -65,44 +104,47 @@ namespace Oxide.Plugins
         
         void OnServerInitialized()
         {
-            // При загрузке сервера обновляем содержимое магазинов из конфига
-            foreach (var shop in configData.Shops)
+            Bounds compoundBounds = new Bounds(new Vector3(0, 0, 0), new Vector3(500, 150, 500));
+            int totalOtherShopsUpdated = 0;
+            int totalCompoundShopsUpdated = 0;
+            
+            foreach (var shop in configData.OtherShops)
             {
                 string shopName = shop.Key;
                 var shopConfig = shop.Value;
+                int updatedCount = 0;
                 
-                if (shopConfig.НастройкаТоваров == null || shopConfig.НастройкаТоваров.Count == 0)
+                if (shopConfig.ItemsConfig == null || shopConfig.ItemsConfig.Count == 0)
                 {
-                    Puts($"Конфигурация товаров для магазина {shopName} не найдена или пуста.");
                     continue;
                 }
                 
                 foreach (var vendingMachine in BaseNetworkable.serverEntities.OfType<VendingMachine>())
                 {
-                    if (vendingMachine.shopName == shopName)
+                    if (vendingMachine.shopName == shopName && !compoundBounds.Contains(vendingMachine.transform.position))
                     {
                         vendingMachine.sellOrders.sellOrders.Clear();
+                        vendingMachine.inventory.Clear();
                         
-                        foreach (var itemConfig in shopConfig.НастройкаТоваров)
+                        foreach (var itemConfig in shopConfig.ItemsConfig)
                         {
-                            var itemDef = ItemManager.FindItemDefinition(itemConfig.ПредметДляПродажи);
-                            var currencyDef = ItemManager.FindItemDefinition(itemConfig.ЦенаЗаПредмет.Keys.First());
-                            int currencyAmount = itemConfig.ЦенаЗаПредмет.Values.First();
+                            var itemDef = ItemManager.FindItemDefinition(itemConfig.ItemToSell);
+                            var currencyDef = ItemManager.FindItemDefinition(itemConfig.CurrencyItem);
                             
                             if (itemDef != null && currencyDef != null)
                             {
                                 var sellOrder = new ProtoBuf.VendingMachine.SellOrder
                                 {
                                     itemToSellID = itemDef.itemid,
-                                    itemToSellAmount = 1,
+                                    itemToSellAmount = itemConfig.AmountToSell,
                                     currencyID = currencyDef.itemid,
-                                    currencyAmountPerItem = currencyAmount,
+                                    currencyAmountPerItem = itemConfig.CurrencyAmount,
                                     inStock = 9999
                                 };
                                 
                                 vendingMachine.sellOrders.sellOrders.Add(sellOrder);
                                 
-                                Item item = ItemManager.Create(itemDef, 9999);
+                                Item item = ItemManager.Create(itemDef, 9999 * itemConfig.AmountToSell);
                                 if (item != null)
                                 {
                                     vendingMachine.inventory.itemList.Add(item);
@@ -111,12 +153,70 @@ namespace Oxide.Plugins
                             }
                         }
                         
-                        vendingMachine.SendNetworkUpdate();
+                        vendingMachine.SendNetworkUpdateImmediate();
                         vendingMachine.UpdateEmptyFlag();
-                        Puts($"Магазин '{shopName}' (ID: {vendingMachine.net.ID}) был обновлен с товарами из конфигурации.");
+                        vendingMachine.RefreshSellOrderStockLevel();
+                        updatedCount++;
                     }
                 }
+                totalOtherShopsUpdated += updatedCount;
             }
+            
+            foreach (var shop in configData.CompoundShops)
+            {
+                string shopName = shop.Key;
+                var shopConfig = shop.Value;
+                int updatedCount = 0;
+                
+                if (shopConfig.ItemsConfig == null || shopConfig.ItemsConfig.Count == 0)
+                {
+                    continue;
+                }
+                
+                foreach (var vendingMachine in BaseNetworkable.serverEntities.OfType<VendingMachine>())
+                {
+                    if (vendingMachine.shopName == shopName && compoundBounds.Contains(vendingMachine.transform.position))
+                    {
+                        vendingMachine.sellOrders.sellOrders.Clear();
+                        vendingMachine.inventory.Clear();
+                        
+                        foreach (var itemConfig in shopConfig.ItemsConfig)
+                        {
+                            var itemDef = ItemManager.FindItemDefinition(itemConfig.ItemToSell);
+                            var currencyDef = ItemManager.FindItemDefinition(itemConfig.CurrencyItem);
+                            
+                            if (itemDef != null && currencyDef != null)
+                            {
+                                var sellOrder = new ProtoBuf.VendingMachine.SellOrder
+                                {
+                                    itemToSellID = itemDef.itemid,
+                                    itemToSellAmount = itemConfig.AmountToSell,
+                                    currencyID = currencyDef.itemid,
+                                    currencyAmountPerItem = itemConfig.CurrencyAmount,
+                                    inStock = 9999
+                                };
+                                
+                                vendingMachine.sellOrders.sellOrders.Add(sellOrder);
+                                
+                                Item item = ItemManager.Create(itemDef, 9999 * itemConfig.AmountToSell);
+                                if (item != null)
+                                {
+                                    vendingMachine.inventory.itemList.Add(item);
+                                    item.parent = vendingMachine.inventory;
+                                }
+                            }
+                        }
+                        
+                        vendingMachine.SendNetworkUpdateImmediate();
+                        vendingMachine.UpdateEmptyFlag();
+                        vendingMachine.RefreshSellOrderStockLevel();
+                        updatedCount++;
+                    }
+                }
+                totalCompoundShopsUpdated += updatedCount;
+            }
+            
+            PrintWarning($"Обновлено магазинов вне компаунда: {totalOtherShopsUpdated}, в компаунде: {totalCompoundShopsUpdated}");
         }
         
         [ChatCommand("cs")]
@@ -124,7 +224,7 @@ namespace Oxide.Plugins
         {
             if (!player.IsAdmin)
             {
-                player.ChatMessage("У вас нет прав для использования этой команды. Только администраторы могут использовать /cs.");
+                player.ChatMessage("Только администраторы могут использовать /cs.");
                 return;
             }
             
@@ -139,7 +239,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                player.ChatMessage("Неизвестная команда. Используйте /cs для списка команд.");
+                player.ChatMessage("Используйте /cs для списка команд.");
             }
         }
         
@@ -185,3 +285,4 @@ namespace Oxide.Plugins
         }
     }
 }
+
