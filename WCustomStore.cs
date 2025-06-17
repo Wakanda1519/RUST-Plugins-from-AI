@@ -104,7 +104,7 @@ namespace Oxide.Plugins
         
         void OnServerInitialized()
         {
-            Bounds compoundBounds = new Bounds(new Vector3(0, 0, 0), new Vector3(500, 150, 500));
+            Bounds compoundBounds = GetCompoundCenter();
             int totalOtherShopsUpdated = 0;
             int totalCompoundShopsUpdated = 0;
             
@@ -282,6 +282,20 @@ namespace Oxide.Plugins
                 contents += $"{costAmount} {costName} за {itemAmount} {itemName}\n";
             }
             return contents;
+        }
+
+        private Bounds GetCompoundCenter()
+        {
+            foreach (var monument in TerrainMeta.Path.Monuments)
+            {
+                if (monument.name.Contains("compound") || monument.name.Contains("outpost"))
+                {
+                    Vector3 center = monument.transform.position;
+                    return new Bounds(center, new Vector3(500, 150, 500));
+                }
+            }
+            PrintWarning("Не удалось найти центр компаунда. Используется центр карты.");
+            return new Bounds(new Vector3(0, 0, 0), new Vector3(500, 150, 500));
         }
     }
 }
