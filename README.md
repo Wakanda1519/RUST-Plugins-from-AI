@@ -41,10 +41,38 @@
 `/lock hide` - вкл/выкл показа кода в чате
 
 ### WModOnline.cs
-Позволяет добавлять фейковых игроков, доступно API для плагинов
+Позволяет добавлять фейковых игроков к общему онлайну
 
 - **Команды**
-`/wm` - список команд для администратора
+`/wm info` - показывает информацию о новом онлайне
+`/wm list` - показывает список фейковых игроков
+
+- **API**
+```charp
+// Получить количество реальных игроков онлайн  
+int GetRealPlayerCount()  
+  
+// Получить количество фейковых игроков  
+int GetFakePlayerCount()  
+  
+// Получить общее количество игроков (реальные + фейковые)  
+int GetTotalPlayerCount()
+
+// Получить список имен фейковых игроков  
+List<string> GetFakePlayerNames()  
+
+// Получить полные данные всех фейковых игроков  
+List<FakePlayerData> GetFakePlayersData()  
+
+// Получить данные конкретного фейкового игрока по индексу  
+FakePlayerData GetFakePlayerData(int index)  
+
+// Получить фейкового игрока по SteamID  
+FakePlayerData GetFakePlayerBySteamID(string steamId)  
+
+// Проверить, является ли SteamID фейковым  
+bool IsFakeSteamID(string steamId)  
+```
 
 ```json
 {
