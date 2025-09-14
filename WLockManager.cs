@@ -76,8 +76,7 @@ namespace Oxide.Plugins
             
             // Проверяем, является ли объект дверью или ящиком
             bool isDoor = entity is Door;
-            bool isBox = (entity.PrefabName.Contains("box.wooden") || entity.PrefabName.Contains("large.wood") || entity.PrefabName.Contains("coffin.storage") || entity is StorageContainer) 
-                         && !entity.PrefabName.Contains("workbench") && !entity.PrefabName.Contains("autoturret");
+            bool isBox = entity.PrefabName.Contains("box.wooden") || entity.PrefabName.Contains("large.wood");
             if (!isDoor && !isBox) return;
             if (entity.IsLocked()) return;
             
